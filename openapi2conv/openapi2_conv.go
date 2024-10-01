@@ -248,9 +248,10 @@ func ToV3Parameter(components *openapi3.Components, parameter *openapi2.Paramete
 
 	case "formData":
 		format, typ := parameter.Format, parameter.Type
-		if typ.Is("file") {
-			format, typ = "binary", &openapi3.Types{"string"}
+		if typ == "file" {
+			format, typ = "binary", "string"
 		}
+
 		if parameter.Extensions == nil {
 			parameter.Extensions = make(map[string]any, 1)
 		}
@@ -261,7 +262,7 @@ func ToV3Parameter(components *openapi3.Components, parameter *openapi2.Paramete
 		}
 		schemaRef := &openapi3.SchemaRef{Value: &openapi3.Schema{
 			Description:     parameter.Description,
-			Type:            typ,
+			Type:            &openapi3.Types{typ},
 			Extensions:      stripNonExtensions(parameter.Extensions),
 			Format:          format,
 			Enum:            parameter.Enum,
@@ -302,7 +303,7 @@ func ToV3Parameter(components *openapi3.Components, parameter *openapi2.Paramete
 			Required:    required,
 			Extensions:  stripNonExtensions(parameter.Extensions),
 			Schema: ToV3SchemaRef(&openapi3.SchemaRef{Value: &openapi3.Schema{
-				Type:            parameter.Type,
+				Type:            &openapi3.Types{parameter.Type},
 				Format:          parameter.Format,
 				Enum:            parameter.Enum,
 				Min:             parameter.Minimum,
@@ -777,7 +778,7 @@ func FromV3SchemaRef(schema *openapi3.SchemaRef, components *openapi3.Components
 
 	if schema.Value != nil {
 		if schema.Value.Type.Is("string") && schema.Value.Format == "binary" {
-			paramType := &openapi3.Types{"file"}
+			paramType := "file"
 			required := false
 
 			value, _ := schema.Value.Extensions["x-formData-name"]
@@ -895,16 +896,13 @@ func FromV3RequestBodyFormData(mediaType *openapi3.MediaType) openapi2.Parameter
 			continue
 		}
 		val := schemaRef.Value
-		typ := val.Type
-		if val.Format == "binary" {
-			typ = &openapi3.Types{"file"}
+		var typ string
+		if schemaRef.Value.Type != nil && len(*schemaRef.Value.Type) > 0 {
+			typ = (*schemaRef.Value.Type)[0]
 		}
 		required := false
-		for _, name := range val.Required {
-			if name == propName {
-				required = true
-				break
-			}
+		if schemaRef.Value.Format == "binary" {
+			typ = "file"
 		}
 		parameter := &openapi2.Parameter{
 			Name:         propName,
@@ -1034,8 +1032,13 @@ func FromV3Parameter(ref *openapi3.ParameterRef, components *openapi3.Components
 			result.Schema = &openapi3.SchemaRef{Ref: FromV3Ref(ref)}
 			return result, nil
 		}
+		var schemaType string
+		result.Type = schemaType
 		schema := schemaRef.Value
-		result.Type = schema.Type
+		if schema.Type != nil && len(*schema.Type) > 0 {
+			schemaType = (*schema.Type)[0]
+		}
+		result.Type = schemaType
 		result.Format = schema.Format
 		result.Enum = schema.Enum
 		result.Minimum = schema.Min

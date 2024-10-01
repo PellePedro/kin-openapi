@@ -38,19 +38,27 @@ func (discriminator Discriminator) MarshalYAML() (any, error) {
 
 // UnmarshalJSON sets Discriminator to a copy of data.
 func (discriminator *Discriminator) UnmarshalJSON(data []byte) error {
-	type DiscriminatorBis Discriminator
-	var x DiscriminatorBis
-	if err := json.Unmarshal(data, &x); err != nil {
-		return unmarshalError(err)
-	}
-	_ = json.Unmarshal(data, &x.Extensions)
-	delete(x.Extensions, "propertyName")
-	delete(x.Extensions, "mapping")
-	if len(x.Extensions) == 0 {
-		x.Extensions = nil
-	}
-	*discriminator = Discriminator(x)
-	return nil
+    // Try to unmarshal as string first
+    var s string
+    if err := json.Unmarshal(data, &s); err == nil {
+        discriminator.PropertyName = s
+        return nil
+    }
+
+    // If not a string, unmarshal as Discriminator object
+    type DiscriminatorBis Discriminator
+    var x DiscriminatorBis
+    if err := json.Unmarshal(data, &x); err != nil {
+        return unmarshalError(err)
+    }
+    _ = json.Unmarshal(data, &x.Extensions)
+    delete(x.Extensions, "propertyName")
+    delete(x.Extensions, "mapping")
+    if len(x.Extensions) == 0 {
+        x.Extensions = nil
+    }
+    *discriminator = Discriminator(x)
+    return nil
 }
 
 // Validate returns an error if Discriminator does not comply with the OpenAPI spec.

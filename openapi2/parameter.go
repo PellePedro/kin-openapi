@@ -20,6 +20,9 @@ func (ps Parameters) Less(i, j int) bool {
 	if ps[i].In != ps[j].In {
 		return ps[i].In < ps[j].In
 	}
+	if ps[i].Type != ps[j].Type {
+		return ps[i].Type < ps[j].Type
+	}
 	return ps[i].Ref < ps[j].Ref
 }
 
@@ -32,7 +35,7 @@ type Parameter struct {
 	Name             string              `json:"name,omitempty" yaml:"name,omitempty"`
 	Description      string              `json:"description,omitempty" yaml:"description,omitempty"`
 	CollectionFormat string              `json:"collectionFormat,omitempty" yaml:"collectionFormat,omitempty"`
-	Type             *openapi3.Types     `json:"type,omitempty" yaml:"type,omitempty"`
+	Type             string              `json:"type,omitempty" yaml:"type,omitempty"`
 	Format           string              `json:"format,omitempty" yaml:"format,omitempty"`
 	Pattern          string              `json:"pattern,omitempty" yaml:"pattern,omitempty"`
 	AllowEmptyValue  bool                `json:"allowEmptyValue,omitempty" yaml:"allowEmptyValue,omitempty"`
@@ -51,6 +54,7 @@ type Parameter struct {
 	MinLength        uint64              `json:"minLength,omitempty" yaml:"minLength,omitempty"`
 	MinItems         uint64              `json:"minItems,omitempty" yaml:"minItems,omitempty"`
 	Default          any                 `json:"default,omitempty" yaml:"default,omitempty"`
+	OpenAPI3Schema   *openapi3.T         `json:"-" yaml:"-"`
 }
 
 // MarshalJSON returns the JSON encoding of Parameter.
@@ -76,7 +80,7 @@ func (parameter Parameter) MarshalJSON() ([]byte, error) {
 	if x := parameter.CollectionFormat; x != "" {
 		m["collectionFormat"] = x
 	}
-	if x := parameter.Type; x != nil {
+	if x := parameter.Type; x != "" {
 		m["type"] = x
 	}
 	if x := parameter.Format; x != "" {
@@ -134,6 +138,12 @@ func (parameter Parameter) MarshalJSON() ([]byte, error) {
 		m["default"] = x
 	}
 
+	// if parameter.In == "body" && parameter.OpenAPI3Schema != nil {
+		// Convert the OpenAPI 3.0 schema back to OpenAPI 2.0 schema
+		// This would involve a recursive conversion process
+		// m["schema"] = convertedSchema
+	// }
+
 	return json.Marshal(m)
 }
 
@@ -144,8 +154,24 @@ func (parameter *Parameter) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &x); err != nil {
 		return unmarshalError(err)
 	}
-	_ = json.Unmarshal(data, &x.Extensions)
-	delete(x.Extensions, "$ref")
+	*parameter = Parameter(x)
+
+	// Handle schema for body parameters
+	if parameter.In == "body" && parameter.Schema != nil {
+		var schemaMap map[string]interface{}
+		if err := json.Unmarshal(data, &schemaMap); err != nil {
+			return unmarshalError(err)
+		}
+		if schemaData, ok := schemaMap["schema"]; ok {
+			schemaBytes, err := json.Marshal(schemaData)
+			if err != nil {
+				return unmarshalError(err)
+			}
+			if err := json.Unmarshal(schemaBytes, &parameter.Schema); err != nil {
+				return unmarshalError(err)
+			}
+		}
+	}
 
 	delete(x.Extensions, "in")
 	delete(x.Extensions, "name")
@@ -175,6 +201,5 @@ func (parameter *Parameter) UnmarshalJSON(data []byte) error {
 		x.Extensions = nil
 	}
 
-	*parameter = Parameter(x)
 	return nil
 }
